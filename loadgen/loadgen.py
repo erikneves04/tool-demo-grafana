@@ -1,3 +1,6 @@
+# Responsavel por gerar carga de trafego para a demo do Grafana.
+# A linha do tempo e didatica: v1 saudavel, v2 com regressao e rollback saudavel.
+
 import os
 import random
 import time
@@ -7,23 +10,29 @@ from datetime import datetime
 import psycopg
 import requests
 
-
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://grafana:grafana@postgres:5432/grafana_demo",
 )
 V1_URL = os.getenv("V1_URL", "http://orders-api-v1:8000")
 V2_URL = os.getenv("V2_URL", "http://orders-api-v2:8000")
-SWITCH_AFTER_SECONDS = int(os.getenv("SWITCH_AFTER_SECONDS", "120"))
-REQUEST_INTERVAL_SECONDS = float(os.getenv("REQUEST_INTERVAL_SECONDS", "0.45"))
-MAX_WORKERS = int(os.getenv("MAX_WORKERS", "12"))
+ROLLBACK_URL = os.getenv("ROLLBACK_URL", V1_URL)
+PHASE_SECONDS = int(os.getenv("PHASE_SECONDS", "240"))
+REQUEST_INTERVAL_SECONDS = float(os.getenv("REQUEST_INTERVAL_SECONDS", "0.20"))
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
 RESET_DATA = os.getenv("RESET_DATA", "true").lower() == "true"
 
 ENDPOINTS = [
-    ("GET", "/catalog", 0.26),
-    ("POST", "/login", 0.17),
-    ("POST", "/profile", 0.17),
-    ("POST", "/checkout", 0.40),
+    ("GET", "/catalog", 0.20),
+    ("POST", "/login", 0.15),
+    ("POST", "/profile", 0.15),
+    ("POST", "/checkout", 0.50),
+]
+
+PHASES = [
+    ("v1", V1_URL, "Inicio da demo: v1 estavel recebendo trafego"),
+    ("v2", V2_URL, "Deploy da versao v2 do servico de pedidos"),
+    ("rollback", ROLLBACK_URL, "Rollback: trafego voltou para a versao estavel"),
 ]
 
 
@@ -51,20 +60,22 @@ def prepare_database() -> None:
             )
 
 
-def mark_deploy_once() -> None:
+def mark_phase(version: str, description: str) -> None:
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO deploy_events (ts, version, description)
-                VALUES (now(), 'v2', 'Deploy da versao v2 do servico de pedidos')
-                """
+                VALUES (date_trunc('minute', now()), %s, %s)
+                """,
+                (version, description),
             )
             cur.execute(
                 """
                 INSERT INTO demo_events (ts, event_type, description)
-                VALUES (now(), 'deploy', 'Trafego migrado de v1 para v2')
-                """
+                VALUES (date_trunc('minute', now()), %s, %s)
+                """,
+                (version, description),
             )
 
 
@@ -78,6 +89,14 @@ def pick_endpoint() -> tuple[str, str]:
     return ENDPOINTS[-1][0], ENDPOINTS[-1][1]
 
 
+def current_phase(elapsed_seconds: float) -> tuple[int, str, str, str]:
+    phase_index = int(elapsed_seconds // PHASE_SECONDS)
+    if phase_index >= len(PHASES):
+        phase_index = len(PHASES) - 1
+    version, base_url, description = PHASES[phase_index]
+    return phase_index, version, base_url, description
+
+
 def call_api(base_url: str) -> None:
     method, endpoint = pick_endpoint()
     try:
@@ -87,25 +106,22 @@ def call_api(base_url: str) -> None:
 
 
 def main() -> None:
-    wait_for_service(V1_URL)
-    wait_for_service(V2_URL)
+    for _, url, _ in PHASES:
+        wait_for_service(url)
     prepare_database()
 
     started = time.monotonic()
-    deploy_marked = False
-    print("loadgen started: traffic begins on v1 and later migrates to v2", flush=True)
+    marked_phases: set[int] = set()
+    print("loadgen started: v1 -> v2 -> rollback", flush=True)
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         while True:
             elapsed = time.monotonic() - started
-            if elapsed >= SWITCH_AFTER_SECONDS:
-                if not deploy_marked:
-                    mark_deploy_once()
-                    deploy_marked = True
-                    print("deploy marker inserted: now sending traffic to v2", flush=True)
-                base_url = V2_URL
-            else:
-                base_url = V1_URL
+            phase_index, version, base_url, description = current_phase(elapsed)
+            if phase_index not in marked_phases:
+                mark_phase(version, description)
+                marked_phases.add(phase_index)
+                print(f"phase marker inserted: {version} - {description}", flush=True)
 
             executor.submit(call_api, base_url)
             time.sleep(REQUEST_INTERVAL_SECONDS)

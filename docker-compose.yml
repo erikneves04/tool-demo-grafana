@@ -68,9 +68,9 @@ services:
       DATABASE_URL: postgresql://grafana:grafana@postgres:5432/grafana_demo
       V1_URL: http://orders-api-v1:8000
       V2_URL: http://orders-api-v2:8000
-      SWITCH_AFTER_SECONDS: "120"
-      REQUEST_INTERVAL_SECONDS: "0.35"
-      MAX_WORKERS: "12"
+      PHASE_SECONDS: "240"
+      REQUEST_INTERVAL_SECONDS: "0.20"
+      MAX_WORKERS: "24"
       RESET_DATA: "true"
 
   grafana:

@@ -56,24 +56,20 @@ def record_event(
 
 def simulate_work(endpoint: str) -> tuple[int, str | None]:
     if endpoint == "/checkout" and APP_VERSION == "v2" and BUG_ENABLED:
-        time.sleep(random.uniform(0.85, 1.9))
-        if random.random() < 0.14:
+        time.sleep(random.uniform(1.05, 1.75))
+        if random.random() < 0.35:
             return 500, "database connection pool exhausted"
         return 200, None
 
     if endpoint == "/checkout":
-        time.sleep(random.uniform(0.12, 0.32))
+        time.sleep(random.uniform(0.12, 0.28))
     elif endpoint == "/catalog":
-        time.sleep(random.uniform(0.05, 0.16))
+        time.sleep(random.uniform(0.05, 0.14))
     elif endpoint == "/login":
-        time.sleep(random.uniform(0.08, 0.22))
-        if random.random() < 0.02:
-            return 401, "invalid credentials"
+        time.sleep(random.uniform(0.08, 0.18))
     else:
-        time.sleep(random.uniform(0.06, 0.18))
+        time.sleep(random.uniform(0.06, 0.16))
 
-    if random.random() < 0.006:
-        return 500, "unexpected upstream error"
     return 200, None
 
 
