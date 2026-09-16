@@ -188,16 +188,6 @@
           "datasource": { "type": "postgres", "uid": "postgres-demo" }
         }
       ]
-    },
-    {
-      "id": 8,
-      "type": "text",
-      "title": "Roteiro da investigação",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
-      "options": {
-        "mode": "markdown",
-        "content": "### Pergunta de manutenção\nDepois da v2, por que usuários reclamam de erro e lentidão?\n\n1. Olhe a taxa de erro e P95\n2. Filtre `version = v2`\n3. Filtre `endpoint = /checkout`\n4. Leia os registros de erro\n5. Conclua: provável esgotamento do pool de conexões\n\nA fonte dos dados é uma API pequena real (`orders-api`) recebendo tráfego do `loadgen`."
-      }
     }
   ]
 }
